@@ -1,4 +1,6 @@
 # Python libraries that we need to import for our bot
+import config
+
 import asyncio
 import random
 import string
@@ -16,7 +18,7 @@ VERIFY_TOKEN = 'SDFJOIUDSJUDIFHUIHSDIFUHIUDSHFIUFDHSIH'
 bot = Bot(ACCESS_TOKEN)
 # When Librus and Synergia accounts have diffrent passwords
 # session = SynergiaClient(authorizer('MAIL', 'HASLOLIBRUS')[0], synergia_user_passwd='HASLOSYNERGIA')
-session = create_session('MAIL', 'HASLO')
+session = create_session(config.login, config.password)
 
 
 # We will receive messages that Facebook sends our bot at this endpoint 
