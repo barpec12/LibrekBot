@@ -8,11 +8,20 @@ import threading
 from hashlib import sha1
 
 from flask import Flask, request
+from flask_sqlalchemy import SQLAlchemy
 from pymessenger.bot import Bot
 
 from librus_tricks import create_session
 
+from models import Recipient, SentAnnouncement
+
+db = SQLAlchemy()
+
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/test.db'
+db.init_app(app)
+
+
 ACCESS_TOKEN = 'JGSIDFJGOSFGUHFSUGHIFUSDHGIUFHIUHDGIUHFIDUHGDIUHFDIUGHDIFUHGIUDHFGIUHDGFIFDGHIUFDGH'
 VERIFY_TOKEN = 'SDFJOIUDSJUDIFHUIHSDIFUHIUDSHFIUFDHSIH'
 bot = Bot(ACCESS_TOKEN)
@@ -140,15 +149,10 @@ async def send_new_messages():
         # session.user.revalidate_user()
         for news in session.news_feed():
             checksum = sha1(news.content.encode('utf-8')).hexdigest()
-            newmessage = True
-            with open('.sent_news.txt', 'r') as filehandle:
-                for line in filehandle:
-                    # remove linebreak
-                    currentPlace = line[:-1]
-                    newmessage = newmessage and currentPlace != checksum
-            if (newmessage):
-                with open('.sent_news.txt', 'a') as filehandle:
-                    filehandle.write('%s\n' % checksum)
+            if not SentAnnouncement.query.filter_by(checksum=checksum).first():
+                print(news.unique_id)
+                db.session.add(SentAnnouncement(unique_id=news.unique_id, checksum=checksum))
+                db.session.commit()
                 with open('recipients.txt', 'r') as filehandle:
                     for line in filehandle:
                         # remove linebreak
@@ -175,7 +179,6 @@ def loop_in_thread(loop):
 
 
 if __name__ == "__main__":
-    f = open(".sent_news", "a+")
     f = open("recipients.txt", "a+")
     send_message('2999999999999999', 'Włączyłem się!')
     loop = asyncio.get_event_loop()
