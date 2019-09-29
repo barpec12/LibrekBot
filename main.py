@@ -7,19 +7,13 @@ import string
 import threading
 from hashlib import sha1
 
-from flask import Flask, request
-from flask_sqlalchemy import SQLAlchemy
+from flask import request
 from pymessenger.bot import Bot
 
 from librus_tricks import create_session
 
-from models import Recipient, SentAnnouncement
-
-db = SQLAlchemy()
-
-app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/test.db'
-db.init_app(app)
+from librekbot import app, db
+from librekbot.models import Recipient, SentAnnouncement
 
 
 ACCESS_TOKEN = 'JGSIDFJGOSFGUHFSUGHIFUSDHGIUFHIUHDGIUHFIDUHGDIUHFDIUGHDIFUHGIUDHFGIUHDGFIFDGHIUFDGH'
@@ -55,19 +49,10 @@ def receive_message():
                     recipient_id = message['sender']['id']
                     if message['message'].get('text'):
                         msg = message['message']['text']
-                        if (msg.lower() == "subskrybuj"):
-                            newrecipient = True
-                            with open('recipients.txt', 'r') as filehandle:
-                                for line in filehandle:
-                                    # remove linebreak
-                                    currentPlace = line[:-1]
-                                    newrecipient = newrecipient and currentPlace != recipient_id
-                            if (newrecipient):
-                                with open('recipients.txt', 'a+') as filehandle:
-                                    filehandle.write('%s\n' % recipient_id)
-                                    send_message(recipient_id, "Pomyślnie dodano do listy!")
-                                # for news in session.news_feed():
-                                # send_message(recipient_id, f'{news.content}')
+                        if msg.lower() == "subskrybuj":
+                            if not Recipient.query.filter_by(fb_id=recipient_id).first():
+                                db.session.add(Recipient(fb_id=recipient_id, student_class=''))
+                                db.session.commit()
                             else:
                                 send_message(recipient_id, "Jestes juz dodany do listy!")
                             print("wyslalem")
@@ -150,26 +135,23 @@ async def send_new_messages():
         for news in session.news_feed():
             checksum = sha1(news.content.encode('utf-8')).hexdigest()
             if not SentAnnouncement.query.filter_by(checksum=checksum).first():
-                print(news.unique_id)
                 db.session.add(SentAnnouncement(unique_id=news.unique_id, checksum=checksum))
                 db.session.commit()
-                with open('recipients.txt', 'r') as filehandle:
-                    for line in filehandle:
-                        # remove linebreak
-                        currentPlace = line[:-1]
-                        message = ""
-                        for line in news.content.split("\n"):
-                            otherClass = False
-                            if (
-                                    "3f" not in line.lower() and "wszyscy" not in line.lower() and "wszystkie" not in line.lower() and "każda" not in line.lower()):
-                                for i in range(1, 4):
-                                    for letter in string.ascii_lowercase:
-                                        if (str(i) + letter in line.lower()):
-                                            otherClass = True
-                            if (not otherClass):
-                                message += line + "\n"
-                        send_message(currentPlace, f'{message}')
-                        print("do:" + currentPlace)
+
+                for recipient in Recipient.query.all():
+                    message = ""
+                    for line in news.content.split("\n"):
+                        otherClass = False
+                        if (
+                                "3f" not in line.lower() and "wszyscy" not in line.lower() and "wszystkie" not in line.lower() and "każda" not in line.lower()):
+                            for i in range(1, 4):
+                                for letter in string.ascii_lowercase:
+                                    if (str(i) + letter in line.lower()):
+                                        otherClass = True
+                        if (not otherClass):
+                            message += line + "\n"
+                    send_message(recipient.fb_id, f'{message}')
+                    print("do:" + str(recipient.fb_id))
         await asyncio.sleep(60 * 5)
 
 
@@ -179,7 +161,6 @@ def loop_in_thread(loop):
 
 
 if __name__ == "__main__":
-    f = open("recipients.txt", "a+")
     send_message('2999999999999999', 'Włączyłem się!')
     loop = asyncio.get_event_loop()
     t = threading.Thread(target=loop_in_thread, args=(loop,))
