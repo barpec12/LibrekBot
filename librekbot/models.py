@@ -7,5 +7,5 @@ class Recipient(db.Model):
 
 
 class SentAnnouncement(db.Model):
-    unique_id = db.Column(db.String(40), unique=True, primary_key=True)
-    checksum = db.Column(db.String(43), unique=True, nullable=False)
+    unique_id = db.Column(db.String(43), unique=True, primary_key=True)
+    checksum = db.Column(db.String(40), unique=True, nullable=False)

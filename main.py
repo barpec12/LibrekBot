@@ -15,10 +15,8 @@ from librus_tricks import create_session
 from librekbot import app, db
 from librekbot.models import Recipient, SentAnnouncement
 
+bot = Bot(config.access_token)
 
-ACCESS_TOKEN = 'JGSIDFJGOSFGUHFSUGHIFUSDHGIUFHIUHDGIUHFIDUHGDIUHFDIUGHDIFUHGIUDHFGIUHDGFIFDGHIUFDGH'
-VERIFY_TOKEN = 'SDFJOIUDSJUDIFHUIHSDIFUHIUDSHFIUFDHSIH'
-bot = Bot(ACCESS_TOKEN)
 # When Librus and Synergia accounts have diffrent passwords
 # session = SynergiaClient(authorizer('MAIL', 'HASLOLIBRUS')[0], synergia_user_passwd='HASLOSYNERGIA')
 session = create_session(config.login, config.password)
@@ -49,12 +47,30 @@ def receive_message():
                     recipient_id = message['sender']['id']
                     if message['message'].get('text'):
                         msg = message['message']['text']
-                        if msg.lower() == "subskrybuj":
-                            if not Recipient.query.filter_by(fb_id=recipient_id).first():
-                                db.session.add(Recipient(fb_id=recipient_id, student_class=''))
+                        if "odsubskrybuj" in msg.lower():
+                            db.session.query(Recipient).filter(Recipient.fb_id == recipient_id).delete()
+                            db.session.commit()
+                            send_message(recipient_id, "Pomyślnie usunięto z listy!")
+                        elif "subskrybuj" in msg.lower():
+                            student_class = ""
+                            splitted = msg.lower().split("subskrybuj ")
+                            if len(splitted) > 1:
+                                if len(splitted[1]) == 2:
+                                    student_class = splitted[1]
+                            row = Recipient.query.filter_by(fb_id=recipient_id).first()
+                            if not row:
+                                db.session.add(Recipient(fb_id=recipient_id, student_class=student_class))
                                 db.session.commit()
+                                send_message(recipient_id, "Pomyślnie dodano do listy!")
+                                if len(student_class) == 2:
+                                    send_message(recipient_id, "Będziesz teraz otrzymywać powiadomienia dla klasy "
+                                                 + student_class + ".")
                             else:
-                                send_message(recipient_id, "Jestes juz dodany do listy!")
+                                # TODO allow changing class
+                                # if not row.student_class.lower() == student_class:
+                                #
+                                # else:
+                                    send_message(recipient_id, "Jestes juz dodany do listy!")
                             print("wyslalem")
                         # elif(msg.lower() == "wszystkie_zmiany"):
                         # for news in session.news_feed():
@@ -63,19 +79,30 @@ def receive_message():
                                                                                 'last changes',
                                                                                 'changes'] or "zmiany" in msg.lower() or "changes" in msg.lower()):
                             newslist = session.news_feed()
-                            send_message(recipient_id, "Przesyłam ostatnie dwa ogłoszenia")
+                            send_message(recipient_id, "Jasne! Już przesyłam ostatnie dwa ogłoszenia")
+                            # TODO do this with for loop
                             send_message(recipient_id, f'{newslist[-1].content}')
                             send_message(recipient_id, f'{newslist[-2].content}')
-                        elif (msg.lower().replace('!', '').replace('.', '') in ['hi', 'hello', 'hej', 'siema',
+                            if(recipient_id == config.developer_id):
+                                send_message(recipient_id, f'{newslist[-1].unique_id}')
+                                send_message(recipient_id, f'{newslist[-1].unique_id}')
+                        elif (msg.lower().replace('!', '').replace('.', '') in ['cześć', 'witaj', 'czesc', 'hi', 'hello', 'hej', 'siema',
                                                                                 'good morning', 'greetings']):
                             send_message(recipient_id, "Hej! Jestem Librekbot.")
-                            send_message(recipient_id, "Potrafię przesłać Ci kilka ostatnich zmian w planie.")
+                            send_message(recipient_id, "Staram się sprawić, abyś otrzymywał szkolne ogłoszenia"
+                                                       " jak najszybciej!")
                             send_message(recipient_id, "Napisz \"pomoc\", aby dowiedzieć się, jak mnie używać!")
                         elif (msg.lower().replace('!', '').replace('.', '') in ['pomoc', 'help']):
                             send_message(recipient_id, "Widzę, że jeszcze nie wiesz, jak mnie używać!")
                             send_message(recipient_id, "Mam nadzieję, że to Ci pomoże:")
                             send_message(recipient_id, "Jeśli chcesz mnie spytać o ostatnie zmiany w planie, napisz:")
                             send_message(recipient_id, "\"ostatnie zmiany\"")
+                            send_message(recipient_id, "Jeśli chciałbyś dowiadywać się regularnie o zmianach w planie,"
+                                                       " wpisz:")
+                            send_message(recipient_id, "\"subskrybuj\"")
+                            send_message(recipient_id, "Możesz też zrezygnować z otrzymywania zmian, wpisując:")
+                            send_message(recipient_id, "\"odsubskrybuj\"")
+
                         elif (msg.lower().replace('!', '').replace('.', '') in ['info', 'informacje', 'author']):
                             send_message(recipient_id,
                                          "Zostałem stworzony, żebyś mógł łatwiej dowiedzieć się o zmianach w planie :)")
@@ -89,6 +116,12 @@ def receive_message():
                                                                                 'good night']):
                             wiad = random.choice(["Zawsze do usług!", "Nie ma sprawy!", "Miło było Ci pomóc!"])
                             send_message(recipient_id, wiad)
+                        elif("wyslijdowszystkich " in msg):
+                            if recipient_id == config.developer_id:
+                                mess = msg.split("wyslijdowszystkich ")[1]
+                                for recipient in Recipient.query.all():
+                                    send_message(recipient.fb_id, mess)
+
                         else:
                             first = random.choice(
                                 ["Niestety, ale tym razem nie udało mi się zrozumieć Twojej wiadomości.",
@@ -108,7 +141,7 @@ def receive_message():
 def verify_fb_token(token_sent):
     # take token sent by facebook and verify it matches the verify token you sent
     # if they match, allow the request, else return an error 
-    if token_sent == VERIFY_TOKEN:
+    if token_sent == config.verify_token:
         return request.args.get("hub.challenge")
     return 'Invalid verification token'
 
@@ -129,7 +162,7 @@ def send_message(recipient_id, response):
 
 @asyncio.coroutine
 async def send_new_messages():
-    while (True):
+    while True:
         # if(not session.user.is_valid):
         # session.user.revalidate_user()
         for news in session.news_feed():
@@ -137,22 +170,28 @@ async def send_new_messages():
             if not SentAnnouncement.query.filter_by(checksum=checksum).first():
                 db.session.add(SentAnnouncement(unique_id=news.unique_id, checksum=checksum))
                 db.session.commit()
-
                 for recipient in Recipient.query.all():
                     message = ""
                     for line in news.content.split("\n"):
-                        otherClass = False
+                        other_class = False
+                        lowclass = recipient.student_class.lower()
                         if (
-                                "3f" not in line.lower() and "wszyscy" not in line.lower() and "wszystkie" not in line.lower() and "każda" not in line.lower()):
+                                lowclass not in line.lower() and "wszyscy" not in line.lower() and "wszystkie" not in line.lower() and "każda" not in line.lower()):
                             for i in range(1, 4):
                                 for letter in string.ascii_lowercase:
-                                    if (str(i) + letter in line.lower()):
-                                        otherClass = True
-                        if (not otherClass):
+                                    # 3f -> 3df
+                                    if str(i) == lowclass[0] and str(i) + letter + lowclass[1] in line.lower():
+                                        other_class = False
+                                        i = 4
+                                        break
+                                    if str(i) + letter in line.lower():
+                                        other_class = True
+                        if not other_class:
                             message += line + "\n"
                     send_message(recipient.fb_id, f'{message}')
                     print("do:" + str(recipient.fb_id))
-        await asyncio.sleep(60 * 5)
+        print("sprawdzilem")
+        await asyncio.sleep(60 * config.update_interval)
 
 
 def loop_in_thread(loop):
@@ -161,7 +200,7 @@ def loop_in_thread(loop):
 
 
 if __name__ == "__main__":
-    send_message('2999999999999999', 'Włączyłem się!')
+    send_message(config.developer_id, 'Włączyłem się!')
     loop = asyncio.get_event_loop()
     t = threading.Thread(target=loop_in_thread, args=(loop,))
     t.start()
