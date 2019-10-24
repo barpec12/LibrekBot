@@ -5,6 +5,7 @@ import asyncio
 import random
 import string
 import threading
+import inspect
 from hashlib import sha1
 
 from flask import request
@@ -47,6 +48,8 @@ def receive_message():
                     recipient_id = message['sender']['id']
                     if message['message'].get('text'):
                         msg = message['message']['text']
+                        sent_by_admin = recipient_id == config.developer_id
+
                         if "odsubskrybuj" in msg.lower():
                             db.session.query(Recipient).filter(Recipient.fb_id == recipient_id).delete()
                             db.session.commit()
@@ -81,30 +84,36 @@ def receive_message():
                             newslist = session.news_feed()
                             send_message(recipient_id, "Jasne! Już przesyłam ostatnie dwa ogłoszenia")
                             # TODO do this with for loop
-                            send_message(recipient_id, f'{newslist[-1].content}')
-                            send_message(recipient_id, f'{newslist[-2].content}')
-                            if (recipient_id == config.developer_id):
-                                send_message(recipient_id, f'{newslist[-1].unique_id}')
-                                send_message(recipient_id, f'{newslist[-2].unique_id}')
+                            news_count = 2
+                            for index in range(news_count):
+                                article = newslist[::-1][index] # goes backwards
+                                send_message(recipient_id, article.content)
+                                if sent_by_admin:
+                                    send_message(recipient_id, article.unique_id)
+
                         elif (msg.lower().replace('!', '').replace('.', '') in ['cześć', 'witaj', 'czesc', 'hi',
                                                                                 'hello', 'hej', 'siema',
                                                                                 'good morning', 'greetings']):
-                            send_message(recipient_id, "Hej! Jestem Librekbot.")
-                            send_message(recipient_id, "Staram się sprawić, abyś otrzymywał szkolne ogłoszenia"
-                                                       " jak najszybciej!")
-                            send_message(recipient_id, "Napisz \"pomoc\", aby dowiedzieć się, jak mnie używać!")
+                            greetings_message = """
+                            Hej! Jestem Librekbot.
+                            Staram się sprawić, abyś otrzymywał szkolne ogłoszenia jak najszybciej!
+                            Napisz "pomoc", aby dowiedzieć się, jak mnie używać!
+                            """
+                            send_message_multiline(recipient_id, greetings_message)
+
                         elif (msg.lower().replace('!', '').replace('.', '') in ['pomoc', 'help']):
-                            send_message(recipient_id, "Widzę, że jeszcze nie wiesz, jak mnie używać!")
-                            send_message(recipient_id, "Mam nadzieję, że to Ci pomoże:")
-                            send_message(recipient_id, "Jeśli chcesz mnie spytać o ostatnie zmiany w planie, napisz:")
-                            send_message(recipient_id, "\"ostatnie zmiany\"")
-                            send_message(recipient_id, "Jeśli chciałbyś dowiadywać się regularnie o zmianach w planie,"
-                                                       " wpisz:")
-                            send_message(recipient_id, "\"subskrybuj\" lub \"subskrybuj KLASA\", np. \"subskrybuj 3F\"")
-                            send_message(recipient_id, "Dzięki wpisaniu klasy będziesz otrzymywać tylko te zmiany"
-                                                       ", które się do niej odnoszą.")
-                            send_message(recipient_id, "Możesz też zrezygnować z otrzymywania zmian, wpisując:")
-                            send_message(recipient_id, "\"odsubskrybuj\"")
+                            help_message = """
+                            Widzę, że jeszcze nie wiesz, jak mnie używać!
+                            Mam nadzieję, że to Ci pomoże:
+                            Jeśli chcesz mnie spytać o ostatnie zmiany w planie, napisz:
+                            "ostatnie zmiany"
+                            Jeśli chciałbyś dowiadywać się regularnie o zmianach w planie, wpisz:
+                            "subskrybuj" lub "subskrybuj KLASA", np. "subskrybuj 3F"
+                            Dzięki wpisaniu klasy będziesz otrzymywać tylko te zmiany, które się do niej odnoszą.
+                            Możesz też zrezygnować z otrzymywania zmian, wpisując:
+                            "odsubskrybuj"
+                            """
+                            send_message_multiline(recipient_id, help_message)
 
                         elif (msg.lower().replace('!', '').replace('.', '') in ['info', 'informacje', 'author', 'autor']):
                             send_message(recipient_id,
@@ -120,27 +129,27 @@ def receive_message():
                                                                                 'good night']):
                             wiad = random.choice(["Zawsze do usług!", "Nie ma sprawy!", "Miło było Ci pomóc!"])
                             send_message(recipient_id, wiad)
-                        elif "sendtoall " in msg:
-                            if recipient_id == config.developer_id:
-                                mess = msg.split("sendtoall ")[1]
-                                for recipient in Recipient.query.all():
-                                    send_message(recipient.fb_id, mess)
-                        elif "sendme " in msg:
-                            if recipient_id == config.developer_id:
-                                mess = msg.split("sendme ")[1]
-                                send_message(recipient_id, mess)
-                        elif "sendmeann " in msg:
-                            if recipient_id == config.developer_id:
-                                aid = msg.split("sendmeann ")[1]
-                                for news in session.news_feed():
-                                    if news.unique_id == aid:
-                                        send_message(recipient_id, f'{news.content}')
-                        elif "sendmefann " in msg:
-                            if recipient_id == config.developer_id:
-                                aid = msg.split("sendmefann ")[1]
-                                for news in session.news_feed():
-                                    if news.unique_id == aid:
-                                        send_message(recipient_id, f'{filter_message(news.content, "3F")}')
+                            
+                        elif "sendtoall " in msg and sent_by_admin:
+                            mess = msg.split("sendtoall ")[1]
+                            for recipient in Recipient.query.all():
+                                send_message(recipient.fb_id, mess)
+
+                        elif "sendme " in msg and sent_by_admin:
+                            mess = msg.split("sendme ")[1]
+                            send_message(recipient_id, mess)
+
+                        elif "sendmeann " in msg and sent_by_admin:
+                            aid = msg.split("sendmeann ")[1]
+                            for news in session.news_feed():
+                                if news.unique_id == aid:
+                                    send_message(recipient_id, f'{news.content}')
+
+                        elif "sendmefann " in msg and sent_by_admin:
+                            aid = msg.split("sendmefann ")[1]
+                            for news in session.news_feed():
+                                if news.unique_id == aid:
+                                    send_message(recipient_id, f'{filter_message(news.content, "3F")}')
                         else:
                             first = random.choice(
                                 ["Niestety, ale tym razem nie udało mi się zrozumieć Twojej wiadomości.",
@@ -173,6 +182,11 @@ def get_message():
     # return selected item to the user
     return random.choice(sample_responses)
 
+# calls send_message for each line of text
+def send_message_multiline(recipient_id, message):
+    message = inspect.cleandoc(message)  # fixes the doc-string indent issue
+    for line in message.trim().split('\n'):
+        send_message(recipient_id, line)
 
 # uses PyMessenger to send response to user
 def send_message(recipient_id, response):
