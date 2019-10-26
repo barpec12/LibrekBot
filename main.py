@@ -6,6 +6,8 @@ import random
 import string
 import threading
 import inspect
+import json
+import requests
 from hashlib import sha1
 
 from flask import request
@@ -42,6 +44,20 @@ def receive_message():
             for message in messaging:
                 # print("wiadomosc")
                 # print(repr(message))
+                if message.get('postback'):
+                    received_payload = message['postback']['payload']
+                    if received_payload == 'pressed_start_button':
+                        recipient_id = message['sender']['id']
+                        greetings_message = """
+                        Hej! Jestem Librekbot.
+                        Staram się sprawić, abyś otrzymywał szkolne ogłoszenia jak najszybciej!
+                        Napisz "pomoc", aby dowiedzieć się, jak mnie używać!
+                        """
+                        send_message_multiline(recipient_id, greetings_message)
+                if message.get('policy-enforcement'):
+                    msg = message['policy-enforcement']
+                    print(config.developer_id, msg['action'] + " " + msg['reason'])
+                    send_message(config.developer_id, msg['action'] + " " + msg['reason'])
                 if message.get('message'):
                     # print("istnieje")
                     # Facebook Messenger ID for user so we know where to send response back to
@@ -86,7 +102,7 @@ def receive_message():
                             # TODO do this with for loop
                             news_count = 2
                             for index in range(news_count):
-                                article = newslist[::-1][index] # goes backwards
+                                article = newslist[::-1][index]  # goes backwards
                                 send_message(recipient_id, article.content)
                                 if sent_by_admin:
                                     send_message(recipient_id, article.unique_id)
@@ -95,16 +111,12 @@ def receive_message():
                                                                                 'hello', 'hej', 'siema',
                                                                                 'good morning', 'greetings']):
                             greetings_message = """
-                            Hej! Jestem Librekbot.
-                            Staram się sprawić, abyś otrzymywał szkolne ogłoszenia jak najszybciej!
-                            Napisz "pomoc", aby dowiedzieć się, jak mnie używać!
+                            No Hej!
                             """
                             send_message_multiline(recipient_id, greetings_message)
 
                         elif (msg.lower().replace('!', '').replace('.', '') in ['pomoc', 'help']):
                             help_message = """
-                            Widzę, że jeszcze nie wiesz, jak mnie używać!
-                            Mam nadzieję, że to Ci pomoże:
                             Jeśli chcesz mnie spytać o ostatnie zmiany w planie, napisz:
                             "ostatnie zmiany"
                             Jeśli chciałbyś dowiadywać się regularnie o zmianach w planie, wpisz:
@@ -112,13 +124,19 @@ def receive_message():
                             Dzięki wpisaniu klasy będziesz otrzymywać tylko te zmiany, które się do niej odnoszą.
                             Możesz też zrezygnować z otrzymywania zmian, wpisując:
                             "odsubskrybuj"
+                            Jeśli chcesz poznać mojego autora i pomóc w ulepszaniu mnie, napisz "autor".
                             """
                             send_message_multiline(recipient_id, help_message)
 
-                        elif (msg.lower().replace('!', '').replace('.', '') in ['info', 'informacje', 'author', 'autor']):
-                            send_message(recipient_id,
-                                         "Zostałem stworzony przez barpec12, żebyś mógł łatwiej"
-                                         " dowiedzieć się o zmianach w planie :)")
+                        elif (msg.lower().replace('!', '').replace('.', '') in ['info', 'informacje', 'author',
+                                                                                'autor']):
+                            author_message = """
+                            Zostałem stworzony przez barpec12.
+                            Możesz zamieszczać sugestie odnośnie mojego działania!
+                            Stwórz issue na https://github.com/barpec12/LibrekBot.
+                            Jeśli potrafisz programować, Ty też możesz mnie ulepszyć! :)
+                            """
+                            send_message_multiline(recipient_id, author_message)
                         elif (msg.lower().replace('!', '').replace('.', '') in ['dzięki', 'dzieki', 'dziekuje',
                                                                                 'dziękuję', 'thanks', 'thank\'s',
                                                                                 'thank you']):
@@ -129,7 +147,7 @@ def receive_message():
                                                                                 'good night']):
                             wiad = random.choice(["Zawsze do usług!", "Nie ma sprawy!", "Miło było Ci pomóc!"])
                             send_message(recipient_id, wiad)
-                            
+
                         elif "sendtoall " in msg and sent_by_admin:
                             mess = msg.split("sendtoall ")[1]
                             for recipient in Recipient.query.all():
@@ -182,11 +200,13 @@ def get_message():
     # return selected item to the user
     return random.choice(sample_responses)
 
+
 # calls send_message for each line of text
 def send_message_multiline(recipient_id, message):
     message = inspect.cleandoc(message)  # fixes the doc-string indent issue
-    for line in message.trim().split('\n'):
+    for line in message.split('\n'):
         send_message(recipient_id, line)
+
 
 # uses PyMessenger to send response to user
 def send_message(recipient_id, response):
@@ -194,7 +214,26 @@ def send_message(recipient_id, response):
     n = 2000
     msgs = [response[i:i + n] for i in range(0, len(response), n)]
     for msg in msgs:
+
         bot.send_text_message(recipient_id, msg)
+    return "success"
+
+
+# sends subscription message (outside 24h window)
+def send_sub_message(recipient_id, response):
+    n = 2000
+    msgs = [response[i:i + n] for i in range(0, len(response), n)]
+    for msg in msgs:
+        payload = {
+            'recipient': {
+                'id': recipient_id
+            },
+            'message': {
+                'text': msg
+            },
+            "tag": "CONFIRMED_EVENT_UPDATE"
+        }
+        bot.send_raw(payload)
     return "success"
 
 
@@ -216,6 +255,7 @@ async def send_new_messages():
                     found = SentAnnouncement.query.filter_by(unique_id=news.unique_id).first()
                     if found:
                         old_text = found.content
+                        found.content = news_content
                         found.checksum = checksum
                     else:
                         db.session.add(SentAnnouncement(unique_id=news.unique_id, checksum=checksum,
@@ -225,15 +265,15 @@ async def send_new_messages():
                         message_filtered = filter_message(news.content, recipient.student_class)
                         old_filtered = filter_message(old_text, recipient.student_class)
                         if not old_filtered == message_filtered:
-                            send_message(recipient.fb_id, f'{message_filtered}')
+                            send_sub_message(recipient.fb_id, f'{message_filtered}')
                             print("do:" + str(recipient.fb_id))
             if in_error:
-                send_message(config.developer_id, 'Już działam!')
+                send_sub_message(config.developer_id, 'Już działam!')
                 in_error = False
             print("sprawdzilem")
         except Exception as e:
             if not in_error:
-                send_message(config.developer_id, 'Jakiś błąd - nie działam!')
+                send_sub_message(config.developer_id, 'Jakiś błąd - nie działam!')
                 in_error = True
             print("blad - nie sprawdzilem")
             print(str(e))
@@ -244,6 +284,7 @@ def loop_in_thread(loop):
     asyncio.set_event_loop(loop)
     loop.run_until_complete(send_new_messages())
 
+
 def filter_message(message, student_class):
     to_return = ""
     for line in message.split("\n"):
@@ -253,6 +294,9 @@ def filter_message(message, student_class):
                 and "wszystkie" not in line.lower() and "każda" not in line.lower()):
             for i in range(1, 4):
                 for letter in string.ascii_lowercase:
+                    # do not filter 3l. Wszyscy zwolnieni
+                    if letter == 'l':
+                        continue
                     # 3f -> 3df
                     if str(i) == lowclass[0] and str(i) + letter + lowclass[1] in line.lower():
                         other_class = False
@@ -264,7 +308,12 @@ def filter_message(message, student_class):
             to_return += line + "\n"
     return to_return
 
+
 if __name__ == "__main__":
+    headers = {'content-type': 'application/json'}
+    payload = {'get_started': {'payload': 'pressed_start_button'}}
+    requests.post('https://graph.facebook.com/v4.0/me/messenger_profile?access_token=' + config.access_token,
+                      json=payload, headers=headers)
     send_message(config.developer_id, 'Włączyłem się!')
     loop = asyncio.get_event_loop()
     t = threading.Thread(target=loop_in_thread, args=(loop,))
