@@ -73,9 +73,12 @@ def receive_message():
                         elif "subskrybuj" in msg.lower():
                             student_class = ""
                             splitted = msg.lower().split("subskrybuj ")
-                            if len(splitted) > 1:
+                            if len(splitted) == 2:
                                 if len(splitted[1]) == 2:
-                                    student_class = splitted[1]
+                                    # non and capital letters
+                                    student_class = msg[len("subskrybuj "):]
+                                    print(student_class)
+                                    # student_class = splitted[1]
                             row = Recipient.query.filter_by(fb_id=recipient_id).first()
                             if not row:
                                 db.session.add(Recipient(fb_id=recipient_id, student_class=student_class))
@@ -289,20 +292,21 @@ def filter_message(message, student_class):
     to_return = ""
     for line in message.split("\n"):
         other_class = False
-        lowclass = student_class.lower()
-        if (lowclass not in line.lower() and "wszyscy" not in line.lower()
+        lower_class = student_class if student_class[0] == "1" else student_class.lower()
+        lower_line = line if student_class[0] == "1" else line.lower()
+        if (lower_class not in lower_line and "wszyscy" not in lower_line
                 and "wszystkie" not in line.lower() and "każda" not in line.lower()):
             for i in range(1, 4):
-                for letter in string.ascii_lowercase:
+                for letter in string.ascii_letters:
                     # do not filter 3l. Wszyscy zwolnieni
-                    if letter == 'l':
+                    if letter.lower() == 'l':
                         continue
                     # 3f -> 3df
-                    if str(i) == lowclass[0] and str(i) + letter + lowclass[1] in line.lower():
+                    if str(i) == lower_class[0] and str(i) + letter + lower_class[1] in lower_line:
                         other_class = False
                         i = 4
                         break
-                    if str(i) + letter in line.lower():
+                    if str(i) + letter in line:
                         other_class = True
         if not other_class:
             to_return += line + "\n"
