@@ -117,7 +117,9 @@ def receive_message():
                             No Hej!
                             """
                             send_message_multiline(recipient_id, greetings_message)
-
+                        elif "numerek" in msg.lower():
+                            number = session.lucky_number
+                            send_message(recipient_id, "Szczęśliwy numerek na dzisiaj to: " + str(number))
                         elif (msg.lower().replace('!', '').replace('.', '') in ['pomoc', 'help']):
                             help_message = """
                             Jeśli chcesz mnie spytać o ostatnie zmiany w planie, napisz:
@@ -127,6 +129,7 @@ def receive_message():
                             Dzięki wpisaniu klasy będziesz otrzymywać tylko te zmiany, które się do niej odnoszą.
                             Możesz też zrezygnować z otrzymywania zmian, wpisując:
                             "odsubskrybuj"
+                            Mogę Ci także wysłać szczęśliwy numerek na dzisiaj! Napisz "numerek".
                             Jeśli chcesz poznać mojego autora i pomóc w ulepszaniu mnie, napisz "autor".
                             """
                             send_message_multiline(recipient_id, help_message)
@@ -268,8 +271,12 @@ async def send_new_messages():
                         message_filtered = filter_message(news.content, recipient.student_class)
                         old_filtered = filter_message(old_text, recipient.student_class)
                         if not old_filtered == message_filtered:
-                            send_sub_message(recipient.fb_id, f'{message_filtered}')
-                            print("do:" + str(recipient.fb_id))
+                            # nie wysylam, gdy jest sam naglowek "zmiany w planie" po filtrowaniu
+                            if not (len(old_filtered) < 3
+                                    and "zmiany w planie" in message_filtered.split("\n")[0].lower()
+                                    and len(message_filtered.split("\n")) == 1):
+                                send_sub_message(recipient.fb_id, f'{message_filtered}')
+                                print("do:" + str(recipient.fb_id))
             if in_error:
                 send_sub_message(config.developer_id, 'Już działam!')
                 in_error = False
