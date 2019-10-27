@@ -299,9 +299,13 @@ def filter_message(message, student_class):
     to_return = ""
     for line in message.split("\n"):
         other_class = False
-        lower_class = student_class if student_class[0] == "1" else student_class.lower()
-        lower_line = line if student_class[0] == "1" else line.lower()
-        if (lower_class not in lower_line and "wszyscy" not in lower_line
+        lower_class = student_class.lower()
+        lower_line = line.lower()
+        if len(student_class) == 2:
+            if student_class[0] == "1":
+                lower_class = student_class
+                lower_line = line
+        if (len(student_class) == 2 and lower_class not in lower_line and "wszyscy" not in lower_line
                 and "wszystkie" not in line.lower() and "każda" not in line.lower()):
             for i in range(1, 4):
                 for letter in string.ascii_letters:
