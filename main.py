@@ -54,11 +54,11 @@ def receive_message():
                         Napisz "pomoc", aby dowiedzieć się, jak mnie używać!
                         """
                         send_message_multiline(recipient_id, greetings_message)
-                if message.get('policy-enforcement'):
+                elif message.get('policy-enforcement'):
                     msg = message['policy-enforcement']
                     print(config.developer_id, msg['action'] + " " + msg['reason'])
                     send_message(config.developer_id, msg['action'] + " " + msg['reason'])
-                if message.get('message'):
+                elif message.get('message'):
                     # print("istnieje")
                     # Facebook Messenger ID for user so we know where to send response back to
                     recipient_id = message['sender']['id']
@@ -92,7 +92,7 @@ def receive_message():
                                 # if not row.student_class.lower() == student_class:
                                 #
                                 # else:
-                                send_message(recipient_id, "Jestes juz dodany do listy!")
+                                send_message(recipient_id, "Już znajdujesz się na liście!")
                             print("wyslalem")
                         # elif(msg.lower() == "wszystkie_zmiany"):
                         # for news in session.news_feed():
@@ -139,7 +139,7 @@ def receive_message():
                             author_message = """
                             Zostałem stworzony przez barpec12.
                             Możesz zamieszczać sugestie odnośnie mojego działania!
-                            Stwórz issue na https://github.com/barpec12/LibrekBot.
+                            Stwórz issue na https://github.com/barpec12/LibrekBot
                             Jeśli potrafisz programować, Ty też możesz mnie ulepszyć! :)
                             """
                             send_message_multiline(recipient_id, author_message)
@@ -157,7 +157,8 @@ def receive_message():
                         elif "sendtoall " in msg and sent_by_admin:
                             mess = msg.split("sendtoall ")[1]
                             for recipient in Recipient.query.all():
-                                send_message(recipient.fb_id, mess)
+                                print(str(recipient.fb_id) +" "+ str(mess))
+                                # send_message(recipient.fb_id, mess)
 
                         elif "sendme " in msg and sent_by_admin:
                             mess = msg.split("sendme ")[1]
